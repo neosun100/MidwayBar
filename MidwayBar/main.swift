@@ -292,7 +292,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         loginItem.state = launchAtLogin ? .on : .off
         m.addItem(loginItem)
 
-        let apiItem = NSMenuItem(title: "  HTTP API (:(apiPort))", action: #selector(toggleAPI), keyEquivalent: "a")
+        let apiItem = NSMenuItem(title: "  HTTP API (:\(apiPort))", action: #selector(toggleAPI), keyEquivalent: "a")
         apiItem.target = self
         apiItem.state = apiEnabled ? .on : .off
         m.addItem(apiItem)
