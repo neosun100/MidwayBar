@@ -8,7 +8,7 @@
 
 **A lightweight macOS menu bar app that monitors your Amazon Midway session status in real-time — like a battery indicator for your authentication.**
 
-![MidwayBar Screenshot](screenshots/menu.png)
+![MidwayBar Screenshot](screenshots/menu-v2.png)
 
 ---
 
