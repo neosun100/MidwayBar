@@ -81,6 +81,71 @@ class StatusBarView: NSView {
     }
 }
 
+// MARK: - Local HTTP API Server
+
+class StatusAPIServer {
+    let port: UInt16 = 19527
+    var serverSocket: Int32 = -1
+
+    func start() {
+        DispatchQueue.global(qos: .background).async { [self] in
+            serverSocket = socket(AF_INET, SOCK_STREAM, 0)
+            guard serverSocket >= 0 else { return }
+
+            var opt: Int32 = 1
+            setsockopt(serverSocket, SOL_SOCKET, SO_REUSEADDR, &opt, socklen_t(MemoryLayout<Int32>.size))
+
+            var addr = sockaddr_in()
+            addr.sin_family = sa_family_t(AF_INET)
+            addr.sin_port = port.bigEndian
+            addr.sin_addr.s_addr = inet_addr("127.0.0.1")
+
+            let bindResult = withUnsafePointer(to: &addr) {
+                $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { bind(serverSocket, $0, socklen_t(MemoryLayout<sockaddr_in>.size)) }
+            }
+            guard bindResult == 0 else { NSLog("API: bind failed on port \(port)"); return }
+            guard listen(serverSocket, 5) == 0 else { return }
+            NSLog("API: listening on http://127.0.0.1:\(port)/status")
+
+            while true {
+                let client = accept(serverSocket, nil, nil)
+                guard client >= 0 else { continue }
+                DispatchQueue.global().async { self.handleClient(client) }
+            }
+        }
+    }
+
+    func handleClient(_ client: Int32) {
+        defer { close(client) }
+
+        var buf = [UInt8](repeating: 0, count: 1024)
+        recv(client, &buf, buf.count, 0)
+        let req = String(bytes: buf, encoding: .utf8) ?? ""
+
+        // Only respond to GET /status
+        guard req.hasPrefix("GET /status") || req.hasPrefix("GET / ") else {
+            let r = "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\n\r\n"
+            send(client, r, r.utf8.count, 0)
+            return
+        }
+
+        let session = MidwaySession.fetch()
+        let json: String
+        if let s = session {
+            json = """
+            {"authenticated":true,"user":"\(s.user)","auth_method":"\(s.authMethod)","percent":\(s.percent),"remaining_seconds":\(Int(s.remaining)),"remaining":"\(s.remainingShort)","expires_at":\(Int(s.expiresAt)),"status":"\(s.percent > 50 ? "healthy" : s.percent > 20 ? "warning" : "critical")"}
+            """
+        } else {
+            json = """
+            {"authenticated":false,"user":null,"percent":0,"remaining_seconds":0,"remaining":"0h0m","status":"expired"}
+            """
+        }
+
+        let response = "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nAccess-Control-Allow-Origin: *\r\nContent-Length: \(json.utf8.count)\r\n\r\n\(json)"
+        send(client, response, response.utf8.count, 0)
+    }
+}
+
 // MARK: - App Delegate
 
 class AppDelegate: NSObject, NSApplicationDelegate {
@@ -89,7 +154,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var timer: Timer?
     var lastSession: MidwaySession?
     let fmt: DateFormatter = { let f = DateFormatter(); f.dateFormat = "HH:mm"; return f }()
-    let version = "1.2.0"
+    let version = "1.4.0"
+    let apiServer = StatusAPIServer()
 
     // Launch at login key
     let launchAtLoginKey = "launchAtLogin"
@@ -119,6 +185,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         statusItem.button?.frame = view.frame
         refresh()
         timer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in self?.refresh() }
+        apiServer.start()
     }
 
     func refresh() {
