@@ -165,7 +165,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var timer: Timer?
     var lastSession: MidwaySession?
     let fmt: DateFormatter = { let f = DateFormatter(); f.dateFormat = "HH:mm"; return f }()
-    let version = "1.4.0"
+    let version = "1.6.0"
     let apiServer = StatusAPIServer()
 
     // Settings keys
