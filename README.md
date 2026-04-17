@@ -1,144 +1,256 @@
 # 🔐 MidwayBar
 
-A lightweight macOS menu bar app that monitors your Amazon Midway session status in real-time — like a battery indicator for your authentication.
+[![macOS](https://img.shields.io/badge/macOS-13%2B-blue)](https://www.apple.com/macos/)
+[![Swift](https://img.shields.io/badge/Swift-5.9-orange)](https://swift.org)
+[![Version](https://img.shields.io/badge/version-v1.6.0-green)]()
+[![Size](https://img.shields.io/badge/binary-125KB-lightgrey)]()
+[![License](https://img.shields.io/badge/license-Internal-red)]()
+
+**A lightweight macOS menu bar app that monitors your Amazon Midway session status in real-time — like a battery indicator for your authentication.**
 
 ![MidwayBar Screenshot](screenshots/menu.png)
 
-## Features
+---
 
-- **Menu bar indicator** — Compact two-line display showing `MW` and remaining percentage
-- **Color-coded status** — 🟢 Green (>50%) | 🟡 Yellow (20-50%) | 🔴 Red (<20%) | 🔴 N/A (expired)
-- **Click to expand** — Full session details: user, auth method, login/expiry time, progress bar
-- **Auto-refresh** — Updates every 30 seconds
-- **Launch at Login** — Toggle from the Settings menu, persists across reboots
-- **Quick actions** — ⌘R Refresh, ⌘M Run mwinit, ⌘Q Quit
-- **Zero dependencies** — Pure Swift + AppKit, no third-party libraries
-- **Tiny footprint** — ~125KB binary, minimal CPU/memory usage
+## 😤 The Problem
 
-## Why?
+Every Amazon employee knows this pain:
 
-Every Amazon employee knows the pain: you're deep in work, then SSH fails, builder-mcp stops, Outlook kicks you out. Was it Midway? Is your session still valid? How much time do you have left?
+> You're deep in work. SSH fails. `builder-mcp` stops responding. Outlook kicks you out. Internal tools return 401.
+>
+> **Was it Midway? Is your session still valid? How much time do you have left?**
+>
+> There's no built-in way to check. You either run `mwinit` again (annoying) or guess (risky).
 
-MidwayBar answers that at a glance — always visible in your menu bar.
+Midway has **three different cookies** with different lifetimes, and any of them expiring breaks different things:
 
-## Midway Session Lifecycle
-
-| Cookie Type | Lifetime | What breaks when it expires |
-|-------------|----------|---------------------------|
+| Cookie | Lifetime | What breaks |
+|--------|----------|-------------|
 | AEA Posture Cookie | ~2 hours | Internal websites, builder-mcp, Outlook |
 | SSH Certificate | ~12 hours | git, SSH to hosts |
-| Session Cookie | ~20 hours | Everything (MidwayBar tracks this one) |
+| Session Cookie | **~20 hours** | Everything |
 
-## Install
+## ✨ The Solution
 
-### Quick Install (recommended)
+**MidwayBar** — always visible in your menu bar, always up to date.
+
+### Features
+
+| Feature | Description |
+|---------|-------------|
+| 📊 **Menu bar indicator** | Compact two-line `MW` + percentage, always visible |
+| 🎨 **Color-coded status** | 🟢 >50% · 🟡 20-50% · 🔴 <20% · 🔴 Expired |
+| 📋 **Click to expand** | User, auth method, login/expiry time, progress bar |
+| 🔄 **Auto-refresh** | Updates every 30 seconds |
+| 🚀 **Launch at Login** | Toggle from Settings menu, persists across reboots |
+| 🌐 **HTTP API** | Optional local API for other tools to query status |
+| ⌨️ **Quick mwinit** | One-click to open Terminal and run `mwinit -f -s -o` |
+| 🪶 **Tiny footprint** | ~125KB binary, zero dependencies, minimal CPU/memory |
+
+---
+
+## 📦 Install
+
+### Option A: DMG (recommended for sharing)
+
+1. Download `MidwayBar-v1.6.0.dmg` from Releases
+2. Double-click to mount
+3. Drag `MidwayBar.app` to `/Applications`
+4. Open from Applications — look for `MW` in your menu bar
+5. Click menu → Settings → **Launch at Login** ✓
+
+### Option B: Build from source
 
 ```bash
 git clone <repo-url> MidwayBar
 cd MidwayBar
-swift build -c release
-cp .build/release/MidwayBar ~/bin/midway-bar
-chmod +x ~/bin/midway-bar
+./install.sh    # Builds, installs, starts, configures auto-launch
 ```
 
-### Set Up Background Service
+### Prerequisites
 
-```bash
-# Copy the launchd plist
-cp com.neo.midwaybar.plist ~/Library/LaunchAgents/
+- macOS 13+ (Ventura or later)
+- Xcode Command Line Tools (`xcode-select --install`) — only for building from source
+- Valid Midway credentials (`mwinit -f -s -o`)
 
-# Start the service (runs in background, survives Terminal close)
-launchctl load ~/Library/LaunchAgents/com.neo.midwaybar.plist
-```
+---
 
-### Enable Launch at Login
+## 🖥️ Usage
 
-Click the MidwayBar menu → **Settings** → **Launch at Login** (⌘L)
+### Menu Bar
 
-## Usage
+| Display | Meaning |
+|---------|---------|
+| `MW` / `99%` (green) | Healthy — more than 50% remaining |
+| `MW` / `45%` (yellow) | Aging — plan to re-authenticate soon |
+| `MW` / `12%` (red) | Critical — renew now before things break |
+| `MW` / `N/A` (red) | Not authenticated or session expired |
 
-| Action | How |
-|--------|-----|
-| Check status | Glance at menu bar — `MW` with colored percentage |
-| View details | Click the menu bar icon |
-| Refresh | ⌘R or click "↻ Refresh Now" |
-| Renew session | ⌘M or click "⌨ Run mwinit -f -s -o" |
-| Toggle auto-start | ⌘L or click "Launch at Login" |
-| Quit | ⌘Q |
+### Keyboard Shortcuts
 
-### Recommended Daily Workflow
+| Shortcut | Action |
+|----------|--------|
+| ⌘R | Refresh status now |
+| ⌘M | Open Terminal and run `mwinit -f -s -o` |
+| ⌘L | Toggle Launch at Login |
+| ⌘A | Toggle HTTP API |
+| ⌘P | Change API port (when API is enabled) |
+| ⌘Q | Quit MidwayBar |
+
+### Daily Workflow
 
 ```bash
 # Run once every morning — gives you ~20 hours
 mwinit -f -s -o
 ```
 
-Then forget about it. MidwayBar will show you when it's time to re-authenticate.
+Then forget about it. MidwayBar shows you when it's time to re-authenticate.
 
-## Menu Bar States
+---
 
-| Display | Meaning |
-|---------|---------|
-| `MW` / `99%` (green) | Session healthy, >50% remaining |
-| `MW` / `45%` (yellow) | Session aging, plan to re-auth soon |
-| `MW` / `12%` (red) | Session critical, renew now |
-| `MW` / `N/A` (red) | Not authenticated or session expired |
+## 🌐 HTTP API
 
-## How It Works
+Optional local API for other tools (scripts, CI/CD, MCP servers) to check Midway status.
+
+**Enable:** Click menu → Settings → HTTP API
+
+### Endpoint
+
+```
+GET http://127.0.0.1:19527/status
+```
+
+### Response
+
+```json
+{
+  "authenticated": true,
+  "user": "jiasunm",
+  "auth_method": "pin + u2f",
+  "percent": 83,
+  "remaining_seconds": 59956,
+  "remaining": "16h39m",
+  "expires_at": 1776454336,
+  "status": "healthy"
+}
+```
+
+### Status Values
+
+| `status` | Meaning |
+|----------|---------|
+| `healthy` | >50% remaining |
+| `warning` | 20-50% remaining |
+| `critical` | <20% remaining |
+| `expired` | Session expired or not authenticated |
+
+### Configuration
+
+- **Default port:** 19527
+- **Custom port:** Menu → Settings → Change Port
+- **Security:** Listens on `127.0.0.1` only (not accessible from network)
+- **Persistence:** API on/off state and port number survive app restarts
+
+### Example: Pre-flight check in scripts
+
+```bash
+status=$(curl -sf http://127.0.0.1:19527/status | python3 -c "import sys,json; print(json.load(sys.stdin)['status'])")
+if [ "$status" != "healthy" ]; then
+  echo "⚠️ Midway session is $status — run mwinit -f -s -o"
+  exit 1
+fi
+```
+
+---
+
+## 🏗️ How It Works
+
+```
+┌─────────────────────────────────────────┐
+│           MidwayBar (menu bar)          │
+│  ┌─────┐  ┌──────────┐  ┌───────────┐  │
+│  │ MW  │  │ Dropdown  │  │ HTTP API  │  │
+│  │ 83% │  │  Panel    │  │ :19527    │  │
+│  └─────┘  └──────────┘  └───────────┘  │
+│              ↑ every 30s                │
+│     curl → Midway API → parse JSON     │
+│     ~/.midway/cookie (read-only)        │
+└─────────────────────────────────────────┘
+```
 
 1. Calls `https://midway-auth.amazon.com/api/session-status` via `curl`
-2. Reads `~/.midway/cookie` for authentication
-3. Parses `auth_time` and `expires_at` from the JSON response
+2. Reads `~/.midway/cookie` for authentication (read-only, never modified)
+3. Parses `auth_time` and `expires_at` from JSON response
 4. Calculates remaining time and percentage
-5. Updates the menu bar icon every 30 seconds
+5. Updates menu bar icon and color every 30 seconds
 
-The app is **read-only** — it never modifies your session or cookies.
+---
 
-## Requirements
-
-- macOS 13+ (Ventura or later)
-- Valid Midway credentials (`mwinit -f -s -o`)
-- `curl` (pre-installed on macOS)
-
-## Project Structure
+## 📁 Project Structure
 
 ```
 MidwayBar/
-├── Package.swift              # Swift Package Manager config
+├── Package.swift              # Swift Package Manager
 ├── MidwayBar/
-│   └── main.swift             # All source code (single file, ~230 lines)
+│   └── main.swift             # All source (~280 lines)
+├── AppIcon.icns               # App icon (shield + lock + MW)
 ├── screenshots/
-│   └── menu.png               # App screenshot
-├── com.neo.midwaybar.plist    # launchd config for background service
-├── README.md                  # This file
-└── .gitignore
+│   └── menu.png               # Screenshot for README
+├── install.sh                 # One-click install script
+├── uninstall.sh               # Clean uninstall
+├── dist/                      # Build artifacts (git-ignored)
+│   ├── MidwayBar.app/         # macOS App Bundle
+│   └── MidwayBar-v1.6.0.dmg  # DMG installer
+└── README.md
 ```
 
-## Troubleshooting
+---
+
+## 🔧 Troubleshooting
 
 | Problem | Solution |
 |---------|----------|
 | Shows `N/A` | Run `mwinit -f -s -o` to authenticate |
-| App disappears when closing Terminal | Use `launchctl load` to start (see Install section) |
-| Menu bar icon too wide/small | Edit `StatusBarView` dimensions in `main.swift` |
-| Percentage stuck | Click ↻ Refresh (⌘R) or check if Midway session expired |
+| App disappears when closing Terminal | Install via DMG to `/Applications`, or use `launchctl` |
+| API not responding | Enable in menu → Settings → HTTP API |
+| Port already in use | Change port via menu → Settings → Change Port |
+| Icon not showing | Check if another instance is running: `ps aux \| grep MidwayBar` |
 
-## Tech Stack
+---
 
-- Swift 5.9
-- AppKit (NSStatusItem, NSMenu)
-- SMAppService (Launch at Login)
-- Swift Package Manager
-- No third-party dependencies
-
-## Version History
+## 📝 Version History
 
 | Version | Date | Changes |
 |---------|------|---------|
-| v1.2.0 | 2026-04-17 | Launch at Login, Settings menu, AppleScript mwinit |
-| v1.1.0 | 2026-04-17 | Compact UI, font optimization, mwinit -f -s -o |
+| v1.6.0 | 2026-04-17 | Custom API port, persistent settings |
+| v1.5.0 | 2026-04-17 | App icon, API toggle in Settings |
+| v1.4.0 | 2026-04-17 | HTTP API, DMG installer |
+| v1.2.0 | 2026-04-17 | Launch at Login, Settings menu |
+| v1.1.0 | 2026-04-17 | Compact UI, font optimization |
 | v1.0.0 | 2026-04-16 | Initial release |
 
-## License
+---
+
+## 🤝 Contributing
+
+```bash
+# Build and test
+swift build -c release
+
+# Package DMG
+./install.sh  # or manually: hdiutil create ...
+
+# Commit
+git add -A && git commit -m "feat: description"
+git tag -a vX.Y.Z -m "vX.Y.Z"
+```
+
+---
+
+## 📄 License
 
 Internal use only — built for Amazon employees.
+
+---
+
+**Built with ❤️ by Neo Sun** · Inspired by [iStat Menus](https://bjango.com/mac/istatmenus/) and the universal pain of expired Midway sessions.
