@@ -86,8 +86,11 @@ class StatusBarView: NSView {
 class StatusAPIServer {
     let port: UInt16 = 19527
     var serverSocket: Int32 = -1
+    var running = false
 
     func start() {
+        guard !running else { return }
+        running = true
         DispatchQueue.global(qos: .background).async { [self] in
             serverSocket = socket(AF_INET, SOCK_STREAM, 0)
             guard serverSocket >= 0 else { return }
@@ -107,12 +110,18 @@ class StatusAPIServer {
             guard listen(serverSocket, 5) == 0 else { return }
             NSLog("API: listening on http://127.0.0.1:\(port)/status")
 
-            while true {
+            while running {
                 let client = accept(serverSocket, nil, nil)
                 guard client >= 0 else { continue }
                 DispatchQueue.global().async { self.handleClient(client) }
             }
         }
+    }
+
+    func stop() {
+        running = false
+        if serverSocket >= 0 { close(serverSocket); serverSocket = -1 }
+        NSLog("API: stopped")
     }
 
     func handleClient(_ client: Int32) {
@@ -157,8 +166,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     let version = "1.4.0"
     let apiServer = StatusAPIServer()
 
-    // Launch at login key
+    // Settings keys
     let launchAtLoginKey = "launchAtLogin"
+    let apiEnabledKey = "apiEnabled"
 
     var launchAtLogin: Bool {
         get { UserDefaults.standard.bool(forKey: launchAtLoginKey) }
@@ -178,6 +188,18 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    var apiEnabled: Bool {
+        get { UserDefaults.standard.bool(forKey: apiEnabledKey) }
+        set {
+            UserDefaults.standard.set(newValue, forKey: apiEnabledKey)
+            if newValue {
+                apiServer.start()
+            } else {
+                apiServer.stop()
+            }
+        }
+    }
+
     func applicationDidFinishLaunching(_ n: Notification) {
         statusItem = NSStatusBar.system.statusItem(withLength: 32)
         view = StatusBarView(frame: NSRect(x: 0, y: 0, width: 32, height: 22))
@@ -185,7 +207,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         statusItem.button?.frame = view.frame
         refresh()
         timer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in self?.refresh() }
-        apiServer.start()
+        if apiEnabled { apiServer.start() }
     }
 
     func refresh() {
@@ -250,6 +272,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         loginItem.state = launchAtLogin ? .on : .off
         m.addItem(loginItem)
 
+        let apiItem = NSMenuItem(title: "  HTTP API (:19527)", action: #selector(toggleAPI), keyEquivalent: "a")
+        apiItem.target = self
+        apiItem.state = apiEnabled ? .on : .off
+        m.addItem(apiItem)
+
         m.addItem(.separator())
 
         // About & Quit
@@ -281,6 +308,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc func toggleLaunchAtLogin() {
         launchAtLogin = !launchAtLogin
+    }
+
+    @objc func toggleAPI() {
+        apiEnabled = !apiEnabled
     }
 
     @objc func doQuit() { NSApp.terminate(nil) }
