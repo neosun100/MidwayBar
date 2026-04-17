@@ -84,9 +84,11 @@ class StatusBarView: NSView {
 // MARK: - Local HTTP API Server
 
 class StatusAPIServer {
-    let port: UInt16 = 19527
+    var port: UInt16
     var serverSocket: Int32 = -1
     var running = false
+
+    init(port: UInt16 = 19527) { self.port = port }
 
     func start() {
         guard !running else { return }
@@ -169,6 +171,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     // Settings keys
     let launchAtLoginKey = "launchAtLogin"
     let apiEnabledKey = "apiEnabled"
+    let apiPortKey = "apiPort"
+    let defaultPort: UInt16 = 19527
 
     var launchAtLogin: Bool {
         get { UserDefaults.standard.bool(forKey: launchAtLoginKey) }
@@ -193,9 +197,25 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         set {
             UserDefaults.standard.set(newValue, forKey: apiEnabledKey)
             if newValue {
+                apiServer.port = apiPort
                 apiServer.start()
             } else {
                 apiServer.stop()
+            }
+        }
+    }
+
+    var apiPort: UInt16 {
+        get {
+            let saved = UserDefaults.standard.integer(forKey: apiPortKey)
+            return saved > 0 ? UInt16(saved) : defaultPort
+        }
+        set {
+            UserDefaults.standard.set(Int(newValue), forKey: apiPortKey)
+            if apiEnabled {
+                apiServer.stop()
+                apiServer.port = newValue
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [self] in apiServer.start() }
             }
         }
     }
@@ -207,7 +227,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         statusItem.button?.frame = view.frame
         refresh()
         timer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in self?.refresh() }
-        if apiEnabled { apiServer.start() }
+        if apiEnabled { apiServer.port = apiPort; apiServer.start() }
     }
 
     func refresh() {
@@ -272,10 +292,16 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         loginItem.state = launchAtLogin ? .on : .off
         m.addItem(loginItem)
 
-        let apiItem = NSMenuItem(title: "  HTTP API (:19527)", action: #selector(toggleAPI), keyEquivalent: "a")
+        let apiItem = NSMenuItem(title: "  HTTP API (:(apiPort))", action: #selector(toggleAPI), keyEquivalent: "a")
         apiItem.target = self
         apiItem.state = apiEnabled ? .on : .off
         m.addItem(apiItem)
+
+        if apiEnabled {
+            let portItem = NSMenuItem(title: "  Change Port (\(apiPort))...", action: #selector(changePort), keyEquivalent: "p")
+            portItem.target = self
+            m.addItem(portItem)
+        }
 
         m.addItem(.separator())
 
@@ -312,6 +338,25 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc func toggleAPI() {
         apiEnabled = !apiEnabled
+    }
+
+    @objc func changePort() {
+        let alert = NSAlert()
+        alert.messageText = "Change API Port"
+        alert.informativeText = "Enter a port number (1024-65535):"
+        alert.addButton(withTitle: "OK")
+        alert.addButton(withTitle: "Cancel")
+
+        let input = NSTextField(frame: NSRect(x: 0, y: 0, width: 120, height: 24))
+        input.stringValue = "\(apiPort)"
+        alert.accessoryView = input
+
+        NSApp.activate(ignoringOtherApps: true)
+        if alert.runModal() == .alertFirstButtonReturn {
+            if let newPort = UInt16(input.stringValue), newPort >= 1024 {
+                apiPort = newPort
+            }
+        }
     }
 
     @objc func doQuit() { NSApp.terminate(nil) }
