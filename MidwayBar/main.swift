@@ -1,5 +1,6 @@
 import AppKit
 import Foundation
+import ServiceManagement
 
 // MARK: - Midway Session
 
@@ -42,12 +43,12 @@ struct MidwaySession {
         guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               json["authenticated"] as? Bool == true else { return nil }
 
-        let user = json["user_name"] as? String ?? "?"
-        let exp = json["expires_at"] as? TimeInterval ?? 0
-        let auth = json["auth_time"] as? TimeInterval ?? 0
-        let amr = (json["amr"] as? [String])?.joined(separator: " + ") ?? ""
-
-        return MidwaySession(user: user, authMethod: amr, authTime: auth, expiresAt: exp)
+        return MidwaySession(
+            user: json["user_name"] as? String ?? "?",
+            authMethod: (json["amr"] as? [String])?.joined(separator: " + ") ?? "",
+            authTime: json["auth_time"] as? TimeInterval ?? 0,
+            expiresAt: json["expires_at"] as? TimeInterval ?? 0
+        )
     }
 }
 
@@ -86,7 +87,30 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var statusItem: NSStatusItem!
     var view: StatusBarView!
     var timer: Timer?
+    var lastSession: MidwaySession?
     let fmt: DateFormatter = { let f = DateFormatter(); f.dateFormat = "HH:mm"; return f }()
+    let version = "1.2.0"
+
+    // Launch at login key
+    let launchAtLoginKey = "launchAtLogin"
+
+    var launchAtLogin: Bool {
+        get { UserDefaults.standard.bool(forKey: launchAtLoginKey) }
+        set {
+            UserDefaults.standard.set(newValue, forKey: launchAtLoginKey)
+            if #available(macOS 13.0, *) {
+                do {
+                    if newValue {
+                        try SMAppService.mainApp.register()
+                    } else {
+                        try SMAppService.mainApp.unregister()
+                    }
+                } catch {
+                    NSLog("Failed to update login item: \(error)")
+                }
+            }
+        }
+    }
 
     func applicationDidFinishLaunching(_ n: Notification) {
         statusItem = NSStatusBar.system.statusItem(withLength: 32)
@@ -101,23 +125,25 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         DispatchQueue.global().async {
             let s = MidwaySession.fetch()
             DispatchQueue.main.async { [self] in
+                lastSession = s
                 if let s {
                     view.topText = "MW"
                     view.bottomText = "\(s.percent)%"
                     view.color = s.statusColor
-                    statusItem.menu = menu(s)
                 } else {
                     view.topText = "MW"
                     view.bottomText = "N/A"
                     view.color = .systemRed
-                    statusItem.menu = menu(nil)
                 }
+                statusItem.menu = buildMenu(s)
             }
         }
     }
 
-    func menu(_ s: MidwaySession?) -> NSMenu {
+    func buildMenu(_ s: MidwaySession?) -> NSMenu {
         let m = NSMenu()
+
+        // Session info
         if let s {
             let ico = s.percent > 50 ? "🟢" : s.percent > 20 ? "🟡" : "🔴"
             add(m, "\(ico) Midway — \(s.percent)%")
@@ -131,18 +157,65 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             add(m, "  [\(String(repeating: "█", count: f))\(String(repeating: "░", count: 20 - f))]")
         } else {
             add(m, "🔴 Not authenticated")
+            add(m, "  Run mwinit -f -s -o to authenticate")
         }
+
         m.addItem(.separator())
-        let r = NSMenuItem(title: "↻ Refresh", action: #selector(doRefresh), keyEquivalent: "r"); r.target = self; m.addItem(r)
-        let w = NSMenuItem(title: "⌨ mwinit -f -s -o", action: #selector(doMwinit), keyEquivalent: "m"); w.target = self; m.addItem(w)
+
+        // Actions
+        let refresh = NSMenuItem(title: "↻ Refresh Now", action: #selector(doRefresh), keyEquivalent: "r")
+        refresh.target = self
+        m.addItem(refresh)
+
+        let mwinit = NSMenuItem(title: "⌨ Run mwinit -f -s -o", action: #selector(doMwinit), keyEquivalent: "m")
+        mwinit.target = self
+        m.addItem(mwinit)
+
         m.addItem(.separator())
-        let q = NSMenuItem(title: "Quit", action: #selector(doQuit), keyEquivalent: "q"); q.target = self; m.addItem(q)
+
+        // Settings
+        let settingsHeader = NSMenuItem(title: "Settings", action: nil, keyEquivalent: "")
+        settingsHeader.isEnabled = false
+        m.addItem(settingsHeader)
+
+        let loginItem = NSMenuItem(title: "  Launch at Login", action: #selector(toggleLaunchAtLogin), keyEquivalent: "l")
+        loginItem.target = self
+        loginItem.state = launchAtLogin ? .on : .off
+        m.addItem(loginItem)
+
+        m.addItem(.separator())
+
+        // About & Quit
+        add(m, "MidwayBar v\(version)")
+
+        let quit = NSMenuItem(title: "Quit MidwayBar", action: #selector(doQuit), keyEquivalent: "q")
+        quit.target = self
+        m.addItem(quit)
+
         return m
     }
 
-    func add(_ m: NSMenu, _ t: String) { let i = NSMenuItem(title: t, action: nil, keyEquivalent: ""); i.isEnabled = false; m.addItem(i) }
+    func add(_ m: NSMenu, _ t: String) {
+        let i = NSMenuItem(title: t, action: nil, keyEquivalent: "")
+        i.isEnabled = false
+        m.addItem(i)
+    }
+
     @objc func doRefresh() { refresh() }
-    @objc func doMwinit() { Process.launchedProcess(launchPath: "/usr/bin/open", arguments: ["-a", "Terminal"]) }
+
+    @objc func doMwinit() {
+        // Open Terminal and run mwinit
+        let script = "tell application \"Terminal\" to do script \"mwinit -f -s -o\""
+        if let appleScript = NSAppleScript(source: script) {
+            var error: NSDictionary?
+            appleScript.executeAndReturnError(&error)
+        }
+    }
+
+    @objc func toggleLaunchAtLogin() {
+        launchAtLogin = !launchAtLogin
+    }
+
     @objc func doQuit() { NSApp.terminate(nil) }
 }
 
